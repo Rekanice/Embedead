@@ -34,9 +34,12 @@ const unsigned char ttable[7][4] = {
   {CCW_NEXT, CCW_FINAL, CCW_BEGIN, START},
 };
 
-// IO pins connected to encoder outputs
+// Input pins connected to encoder outputs
 #define ENCA 2 
 #define ENCB 3
+// Output pins connected to motor driver inputs
+#define M1A 5
+#define M1B 6
 
 // encoder count
 volatile int counter = 0;
@@ -45,22 +48,31 @@ unsigned char state;
 
 //custom functions' declarations
 void readEncoder();
+void setMotor(int pwm, int ma, int mb);
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
-
-  pinMode(ENCA, INPUT);
-  pinMode(ENCB, INPUT);
-
+  
   // Initialise state.
   state = START;
 
+  pinMode(ENCA, INPUT);
+  pinMode(ENCB, INPUT);
+  
+  pinMode(M1A,OUTPUT);
+  pinMode(M1B,OUTPUT);
+
+  digitalWrite(M1A, LOW);
+  digitalWrite(M1B, LOW);
+  
   attachInterrupt(0, readEncoder, CHANGE); // ENCA
   attachInterrupt(1, readEncoder, CHANGE); // ENCB
 }
 
-void loop() {}
+void loop() {
+  setMotor(100,M1A,M1B);
+}
 
 void readEncoder(){
   // Grab state of input pins.
@@ -71,6 +83,7 @@ void readEncoder(){
   // ie the direction determined by the state machine.
   unsigned char result = state & 0x30;
   
+  // Only after direction is determined in one phase cycle, count up / down accordingly
   if (result == DIR_CW) { // It's counting up smoothly in sync with my rotating of the wheel
     counter++;
     Serial.print(state); Serial.print(" ");  Serial.println(counter);
@@ -80,3 +93,31 @@ void readEncoder(){
     Serial.print(state); Serial.print(" ");  Serial.println(counter);
   }
 }
+
+void setMotor(int pwm, int ma, int mb){
+  // Make sure the speed is within the limit.
+  if (pwm > 255) {
+    pwm = 255;
+  } 
+  else if (pwm < -255) {
+    pwm = -255;
+  }
+
+  // For direction, functions used here cater to my motor driver (MDD3A) 
+  // MDD3A has dual PWM pins for a single motor channel. 
+  // Direction is specified in signage of pwm value.
+  if (pwm >= 0) {
+    analogWrite(ma, pwm);
+    analogWrite(mb, 0);
+  } 
+  else {
+    analogWrite(ma, 0);
+    analogWrite(mb, -pwm);
+  }
+}
+
+
+/* 
+Findings:
+  The encoder count was ok in syncing at low speed, but seems stuck at high speeds (PWM=200)
+*/
