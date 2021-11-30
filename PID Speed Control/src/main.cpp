@@ -9,29 +9,26 @@
 
 // Defined states of the encoder channels AB (in this order)
 #define START 0x0
-#define CW_FINAL 0x1
+#define CCW_BEGIN 0x1
 #define CW_BEGIN 0x2
-#define CW_NEXT 0x3
-#define CCW_BEGIN 0x4
-#define CCW_FINAL 0x5
-#define CCW_NEXT 0x6
+#define START_M 0x3
+#define CW_BEGIN_M 0x4
+#define CCW_BEGIN_M 0x5
 
 // State table - tells what is the next possible states for a given current state
-const unsigned char ttable[7][4] = {
-  // START
-  {START,    CW_BEGIN,  CCW_BEGIN, START},
-  // CW_FINAL
-  {CW_NEXT,  START,     CW_FINAL,  START | DIR_CW}, 
-  // CW_BEGIN 
-  {CW_NEXT,  CW_BEGIN,  START,     START},
-  // CW_NEXT
-  {CW_NEXT,  CW_BEGIN,  CW_FINAL,  START},
+const unsigned char ttable[6][4] = {
+  // START (00)
+  {START_M,           CW_BEGIN,     CCW_BEGIN,  START},
   // CCW_BEGIN
-  {CCW_NEXT, START,     CCW_BEGIN, START},
-  // CCW_FINAL
-  {CCW_NEXT, CCW_FINAL, START,     START | DIR_CCW},
-  // CCW_NEXT
-  {CCW_NEXT, CCW_FINAL, CCW_BEGIN, START},
+  {START_M | DIR_CCW, START,        CCW_BEGIN,  START},
+  // CW_BEGIN
+  {START_M | DIR_CW,  CW_BEGIN,     START,      START},
+  // START_M (11)
+  {START_M,           CCW_BEGIN_M,  CW_BEGIN_M, START},
+  // CW_BEGIN_M
+  {START_M,           START_M,      CW_BEGIN_M, START | DIR_CW},
+  // CCW_BEGIN_M
+  {START_M,           CCW_BEGIN_M,  START_M,    START | DIR_CCW},
 };
 
 // Input pins connected to encoder outputs
@@ -41,8 +38,11 @@ const unsigned char ttable[7][4] = {
 #define M1A 5
 #define M1B 6
 
+// GLOBALS
+// Interrupt variables are volatile
 // encoder count
-volatile int counter = 0;
+volatile long counter = 0;
+
 // encoder state
 unsigned char state;
 
@@ -71,7 +71,7 @@ void setup() {
 }
 
 void loop() {
-  setMotor(100,M1A,M1B);
+  setMotor(-100,M1A,M1B);
 }
 
 void readEncoder(){
@@ -86,11 +86,11 @@ void readEncoder(){
   // Only after direction is determined in one phase cycle, count up / down accordingly
   if (result == DIR_CW) { // It's counting up smoothly in sync with my rotating of the wheel
     counter++;
-    Serial.print(state); Serial.print(" ");  Serial.println(counter);
+    Serial.println(counter);
   } 
   else if (result == DIR_CCW) { // It's counting down slowly out of sync with my rotating of the wheel
     counter--;
-    Serial.print(state); Serial.print(" ");  Serial.println(counter);
+    Serial.println(counter);
   }
 }
 
@@ -119,5 +119,13 @@ void setMotor(int pwm, int ma, int mb){
 
 /* 
 Findings:
-  The encoder count was ok in syncing at low speed, but seems stuck at high speeds (PWM=200)
+  The encoder count was ok in syncing at low speed, but seems stuck at high speeds (PWM=200).
+  This apparently is due to counting one pulse per phase, so I have to go thru each state in the state table 
+  b4 I can read a count. So, this result in a lot of stuck state bcos fast rotation cause the encoder to not 
+  catch the pulses, and therefore waits a lot for the right next state.
+
+  Solution:
+  By using half step (counting when I reach half of the state table 00 & 11), this reduces the waiting if I 
+  MCU already knows it's moving clockwise or ACW by knowing the right transition before 00 & 11. This counting 
+  works well counting up & down.
 */
