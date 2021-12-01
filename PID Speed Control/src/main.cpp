@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <math.h>
 
 // No complete step yet.
 #define DIR_NONE 0x0
@@ -38,23 +39,40 @@ const unsigned char ttable[6][4] = {
 #define M1A 5
 #define M1B 6
 
-// GLOBALS
-// Interrupt variables are volatile
-// encoder count
-volatile long counter = 0;
+#define POT 0
 
-// encoder state
-unsigned char state;
+// Global Interrupt variables are volatile
+volatile bool newIsr = false;
+volatile unsigned long isrTime;
+volatile unsigned long isrCount = 0;  // encoder count
+
+// Global Non-Interrupt variables
+unsigned char state;      // encoder state
+unsigned long currTime = 0;   // current revolution time
+unsigned long prevTime = 0;   // previous revolution time
+float elapsedTime = 0; // change in time
+long currCount = 0;
+long prevCount = 0;
+float setRpm = 0;
+double cps = 0;
+double rpm = 0;
+double error = 0;
+double prevError = 0;
+double cumError = 0;
+double rateError = 0;
+float pidPwm;
 
 //custom functions' declarations
 void readEncoder();
 void setMotor(int pwm, int ma, int mb);
+void getIsrData();
+void pidControl(float kp, float ki, float kd);
 
 void setup() {
   // put your setup code here, to run once:
   Serial.begin(9600);
   
-  // Initialise state.
+  // Initialise
   state = START;
 
   pinMode(ENCA, INPUT);
@@ -68,10 +86,19 @@ void setup() {
   
   attachInterrupt(0, readEncoder, CHANGE); // ENCA
   attachInterrupt(1, readEncoder, CHANGE); // ENCB
+  
+  setMotor(0,M1A,M1B);
+  pidControl(0.5, 0, 1); // I put one here bcos without it, we need a count to run. But this is not possible when starting from stationary.
 }
 
 void loop() {
-  setMotor(-100,M1A,M1B);
+  setRpm = analogRead(POT);
+  getIsrData();
+  pidControl(1, 0.1, 0.01);
+  setMotor((int)fabs(pidPwm), M1A, M1B);
+
+  Serial.print("counts: "); Serial.print(currCount-prevCount); Serial.print("  "); Serial.print("dT: "); Serial.print(elapsedTime); Serial.print("  ");  Serial.print("cps: "); Serial.print(cps); Serial.print("  "); Serial.print("rpm: "); Serial.println(rpm);
+  delay(500);
 }
 
 void readEncoder(){
@@ -85,12 +112,16 @@ void readEncoder(){
   
   // Only after direction is determined in one phase cycle, count up / down accordingly
   if (result == DIR_CW) { // It's counting up smoothly in sync with my rotating of the wheel
-    counter++;
-    Serial.println(counter);
+    isrTime = micros();
+    isrCount++;
+    newIsr = true;
+    // Serial.println(isrCount);
   } 
   else if (result == DIR_CCW) { // It's counting down slowly out of sync with my rotating of the wheel
-    counter--;
-    Serial.println(counter);
+    isrTime = micros();
+    isrCount--;
+    newIsr = true;
+    // Serial.println(isrCount);
   }
 }
 
@@ -116,16 +147,45 @@ void setMotor(int pwm, int ma, int mb){
   }
 }
 
+void getIsrData(){
+  if (newIsr == true){
+    // Save the previous value
+    prevCount = currCount;
 
-/* 
-Findings:
-  The encoder count was ok in syncing at low speed, but seems stuck at high speeds (PWM=200).
-  This apparently is due to counting one pulse per phase, so I have to go thru each state in the state table 
-  b4 I can read a count. So, this result in a lot of stuck state bcos fast rotation cause the encoder to not 
-  catch the pulses, and therefore waits a lot for the right next state.
+    // Read parameter values from ISR, by pausing interrupts
+    noInterrupts();
+      currCount = isrCount;
+      newIsr = false;
+    interrupts();   
+  }
+}
 
-  Solution:
-  By using half step (counting when I reach half of the state table 00 & 11), this reduces the waiting if I 
-  MCU already knows it's moving clockwise or ACW by knowing the right transition before 00 & 11. This counting 
-  works well counting up & down.
+void pidControl(float kp, float ki, float kd){
+  prevTime = currTime; 
+  currTime = micros();
+  elapsedTime = ((float)(currTime - prevTime)) / 1.0e6;   // Time change in seconds
+  cps = (currCount - prevCount) / elapsedTime;      // Velocity in count per second
+  rpm = cps / 420.0 * 60;     // Velocity in RPM (X2 counting, 420 counts per revolution)
+  
+  // Scale rpm to pwm scale (0 - 255)
+  rpm = rpm / 60 * 255;
+  setRpm = setRpm / 1023 * 255;
+
+  // Compute the control signal, pidPwm
+  error = setRpm - rpm;
+  cumError += error*elapsedTime;
+  rateError = (error - prevError) / elapsedTime;
+  pidPwm = kp*error + ki*cumError + kd*rateError;
+  prevError = error;
+}
+
+/*
+Finally, a working PID prototype
+There are some configuration issues, which I think is affecting the timing of evrything.
+TODO:
+- Make flowchart and work from there to troubleshoot
+- How to start motor without counting, and only use counting when the the motor is running
+- How to fix the jitters in the motor speed up
+- How to fix the timing issues in reading & calcultaing the parameters
+- Try out different PID values. 
 */
