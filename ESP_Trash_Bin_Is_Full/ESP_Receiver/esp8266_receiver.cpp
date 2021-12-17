@@ -1,5 +1,5 @@
 /*
- ESPNOW communication between a master(receivers) ESP8266 at the ground floor LED panel, with the other slave(senders) ESP32's in the trash bins.
+ ESPNOW communication between a master(receivers) ESP8266 at the ground floor LED panel, with the other slave(senders) ESP8266's in the trash bins.
  This program setups the receiver ESP to listen for messages from the sender ESPs, and then act upon the message by lighting up LEDs.
  Here, when the trash bin threshold distance is exceeded at the sender, the receiver will light up its LED.
 */
