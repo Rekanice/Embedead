@@ -1,6 +1,12 @@
 #include <Arduino.h>
 
 // Complete Instructions to Get and Change ESP MAC Address: https://RandomNerdTutorials.com/get-change-esp32-esp8266-mac-address-arduino/
+/*
+STEPS:
+1. Build, compile, & upload code to ESP
+2. Open Serial Monitor
+3. Press RST button on ESP, MAC Address should pop up
+*/
 
 #include <ESP8266WiFi.h>
 
