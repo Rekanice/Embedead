@@ -8,7 +8,7 @@
 void setup(){
 
   Serial.begin(115200);
-  // Set internal pullup resistors for the input ppins reading the dip switch pin
+  // Set internal pullup resistors for the input pins reading the dip switch pin
   pinMode(dip1, INPUT_PULLUP);
   pinMode(dip2, INPUT_PULLUP);
   pinMode(dip3, INPUT_PULLUP);
