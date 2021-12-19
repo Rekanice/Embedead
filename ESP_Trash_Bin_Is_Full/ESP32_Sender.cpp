@@ -41,16 +41,15 @@ const int trigPin2 = 26;
 const int echoPin2 = 25;
 const int trigPin3 = 13;
 const int echoPin3 = 27;
-const int trigPin4 =  4;
-const int echoPin4 = 16;
+const int trigPin4 = 16;
+const int echoPin4 =  4;
 
-//define sound velocity in cm/uS
-#define SOUND_SPEED 0.034
-#define TRASHOLD 10
+#define SOUND_SPEED 0.034   // cm/uS
+#define TRASHOLD 10         // cm
+#define MAX_BIN_DEPTH 50    // cm
 
 long duration;
 bool binFull = false;
-
 
 uint getDistance(uint8_t trigPin, uint8_t echoPin){
   // Emit ultrasonic wave
@@ -79,13 +78,34 @@ uint getDistance(uint8_t trigPin, uint8_t echoPin){
 
 bool isBinFull(){
 
-  uint totalDistance = 
-    getDistance(trigPin1,echoPin1) + 
-    getDistance(trigPin2,echoPin2) + 
-    getDistance(trigPin3,echoPin3) + 
-    getDistance(trigPin4,echoPin4);
+  // Set a max bin depth & check if the distance measured by an ultrasonic sensor exceeds this depth. 
+  // This means the measured distance is not valid & the extreme distance is probably due to uneevn reflected surface of the trash, 
+  // causing the echo to travel a longer distance.
+  char validCount = 0;  // Only average the valid distances.
+  uint totalDistance = 0;
+
+  uint dist1 = getDistance(trigPin1,echoPin1);
+  if (dist1 <= MAX_BIN_DEPTH) {
+    ++validCount;
+    totalDistance += dist1;
+  }
+  uint dist2 = getDistance(trigPin2,echoPin2);
+  if (dist2 <= MAX_BIN_DEPTH) {
+    ++validCount;
+    totalDistance += dist2;
+  }
+  uint dist3 = getDistance(trigPin3,echoPin3);
+  if (dist3 <= MAX_BIN_DEPTH) {
+    ++validCount;
+    totalDistance += dist3;
+  }
+  uint dist4 = getDistance(trigPin4,echoPin4);
+  if (dist4 <= MAX_BIN_DEPTH) {
+    ++validCount;
+    totalDistance += dist4;
+  }
   
-  uint avgDistance = totalDistance / 4;
+  uint avgDistance = totalDistance / validCount;
   Serial.print("Avg Distance: ");
   Serial.print(avgDistance);
   Serial.println(" cm");
