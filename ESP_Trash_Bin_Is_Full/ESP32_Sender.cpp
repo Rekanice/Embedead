@@ -3,7 +3,7 @@
 #include <esp_now.h>
 
 // - - - - - - - - - - - - - - - - - - -
-// ESP NOW communication stuff
+// ESP-NOW communication stuff
 
 // REPLACE WITH RECEIVER MAC Address
 uint8_t broadcastAddress[] = {0xAC, 0x0B, 0xFB, 0xC2, 0xB8, 0xF9};
@@ -11,6 +11,7 @@ uint8_t broadcastAddress[] = {0xAC, 0x0B, 0xFB, 0xC2, 0xB8, 0xF9};
 // Structure example to send data
 // Must match the receiver structure
 typedef struct struct_message {
+  char floor;
   bool full = false;
 } struct_message;
 
@@ -24,24 +25,24 @@ unsigned long timerDelay = 5000;  // send readings timer
 void OnDataSent(const uint8_t *mac_addr, esp_now_send_status_t sendStatus) {
   Serial.print("Last Packet Send Status: ");
   if (sendStatus == 0){
-    Serial.println("Delivery success");
+    Serial.println("Delivery success \n\n");
   }
   else{
-    Serial.println("Delivery fail");
+    Serial.println("Delivery fail \n\n");
   }
 }
 
 // - - - - - - - - - - - - - - - - - - -
 // Ultrasonic sensor stuff
 
-const int trigPin1 = 26;
-const int echoPin1 = 13;
-const int trigPin2 = 14;
-const int echoPin2 = 21;
-const int trigPin3 = 16;
-const int echoPin3 = 17;
-const int trigPin4 = 18;
-const int echoPin4 = 19;
+const int trigPin1 = 18;
+const int echoPin1 = 17;
+const int trigPin2 = 26;
+const int echoPin2 = 25;
+const int trigPin3 = 13;
+const int echoPin3 = 27;
+const int trigPin4 =  4;
+const int echoPin4 = 16;
 
 //define sound velocity in cm/uS
 #define SOUND_SPEED 0.034
@@ -85,7 +86,10 @@ bool isBinFull(){
     getDistance(trigPin4,echoPin4);
   
   uint avgDistance = totalDistance / 4;
-  
+  Serial.print("Avg Distance: ");
+  Serial.print(avgDistance);
+  Serial.println(" cm");
+
   if (avgDistance <= TRASHOLD){
     binFull = true;
   }else{
@@ -97,8 +101,42 @@ bool isBinFull(){
 
 
 // - - - - - - - - - - - - - - - - - - -
+// DIP Switch stuff
 
+#define dip1 23 
+#define dip2 22
+#define dip3 21
+#define dip4 19
 
+char whatFloor(){
+  // Read the dip switch pin values as a binary value, for better targeting the one-hot encoding states.
+  // How it works: Bitwise OR (Add) the pin values after left-shifting the pin value to its appropriate binary place value.
+  byte dipByte = (
+    digitalRead(dip1) | 
+    (digitalRead(dip2) << 1) |
+    (digitalRead(dip3) << 2) |
+    (digitalRead(dip4) << 3) 
+  );
+  
+  Serial.print("Dip Byte: ");
+  Serial.print(dipByte);
+  Serial.print("\t");
+
+  char floorNum = 0;
+
+  switch(int(dipByte)){
+    case 0 : Serial.println("GRD Floor is ON."); floorNum=0; break;
+    case 1 : Serial.println("Floor 1 is ON.");   floorNum=1; break;
+    case 2 : Serial.println("Floor 2 is ON.");   floorNum=2; break;
+    case 4 : Serial.println("Floor 3 is ON.");   floorNum=3; break;
+    case 8 : Serial.println("Floor 4 is ON.");   floorNum=4; break;
+    default: Serial.println("Invalid floor. Not one-hot encoding binary. OR switch bounce occurred (just wait awhile)."); break;
+  }
+
+  return floorNum;
+}
+
+// - - - - - - - - - - - - - - - - - - -
 void setup() {
   // Starts the serial communication
   Serial.begin(115200);
@@ -137,6 +175,12 @@ void setup() {
   pinMode(echoPin3,  INPUT);
   pinMode(trigPin4, OUTPUT);
   pinMode(echoPin4,  INPUT);
+
+  // Set internal pullup resistors for the input pins reading the dip switch pin
+  pinMode(dip1, INPUT_PULLUP);
+  pinMode(dip2, INPUT_PULLUP);
+  pinMode(dip3, INPUT_PULLUP);
+  pinMode(dip4, INPUT_PULLUP);
   
 }
 
@@ -146,6 +190,7 @@ void loop() {
 
   // Set values to send
   myData.full = isBinFull();
+  myData.floor = whatFloor();
 
   // Send message via ESP-NOW
   esp_now_send(broadcastAddress, (uint8_t *) &myData, sizeof(myData));
